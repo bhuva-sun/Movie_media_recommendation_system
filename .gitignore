@@ -1,0 +1,26 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Django
+*.log
+logs/
+db.sqlite3
+staticfiles/
+media/
+
+# Local / IDE
+.env
+.env.*
+!.env.example
+.cursor/
+.DS_Store
+*.zip
+
+# Too large for GitHub (>100MB); use training/models on Render or Git LFS
+models/similarity_matrix.npz

@@ -1,0 +1,188 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | Movie Recommendation System</title>
+    <link rel="shortcut icon" href="{% static 'logo.ico' %}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --text: #f1f5f9;
+            --muted: #cbd5e1;
+            --primary: #6366f1;
+            --secondary: #8b5cf6;
+            --danger: #ef4444;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 1rem;
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, var(--bg), #1a1f3a);
+            color: var(--text);
+        }
+        .card {
+            width: 100%;
+            max-width: 420px;
+            background: var(--surface);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 14px;
+            padding: 2rem;
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+        }
+        h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+        .subtitle { color: var(--muted); margin-bottom: 1.5rem; }
+        .mode-toggle { display: flex; gap: 0.5rem; margin-bottom: 1.2rem; }
+        .toggle-btn {
+            flex: 1;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            background: transparent;
+            color: var(--muted);
+            padding: 0.65rem 0.8rem;
+            cursor: pointer;
+        }
+        .toggle-btn.active {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: #fff;
+            border-color: transparent;
+        }
+        label { display: block; margin-bottom: 0.5rem; font-size: 0.92rem; }
+        input {
+            width: 100%;
+            margin-bottom: 1rem;
+            padding: 0.8rem 0.9rem;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            background: #0b1220;
+            color: var(--text);
+        }
+        .submit-btn {
+            width: 100%;
+            padding: 0.85rem;
+            border: none;
+            border-radius: 10px;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+        }
+        .message { margin-top: 1rem; min-height: 1.25rem; font-size: 0.9rem; color: var(--muted); }
+        .message.error { color: #fca5a5; }
+        .hint { margin-top: 0.8rem; font-size: 0.8rem; color: #94a3b8; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Welcome Back</h1>
+        <p class="subtitle">Login or create an account to continue.</p>
+
+        <div class="mode-toggle">
+            <button class="toggle-btn active" id="loginModeBtn" type="button">Login</button>
+            <button class="toggle-btn" id="signupModeBtn" type="button">Sign Up</button>
+        </div>
+
+        <form id="authForm">
+            <label for="email">Email</label>
+            <input id="email" type="email" required placeholder="you@example.com">
+            <label for="password">Password</label>
+            <input id="password" type="password" minlength="6" required placeholder="At least 6 characters">
+            <button class="submit-btn" id="submitBtn" type="submit">Login</button>
+        </form>
+
+        <p class="message" id="messageArea"></p>
+        <p class="hint">After successful login, you will be redirected to the movie search page.</p>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+        import {
+            getAuth,
+            onAuthStateChanged,
+            signInWithEmailAndPassword,
+            createUserWithEmailAndPassword
+        } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "{{ firebase_config.apiKey|escapejs }}",
+            authDomain: "{{ firebase_config.authDomain|escapejs }}",
+            projectId: "{{ firebase_config.projectId|escapejs }}",
+            storageBucket: "{{ firebase_config.storageBucket|escapejs }}",
+            messagingSenderId: "{{ firebase_config.messagingSenderId|escapejs }}",
+            appId: "{{ firebase_config.appId|escapejs }}",
+            measurementId: "{{ firebase_config.measurementId|escapejs }}"
+        };
+
+        const hasFirebaseConfig = Boolean(firebaseConfig.apiKey && firebaseConfig.authDomain && firebaseConfig.projectId && firebaseConfig.appId);
+        const messageArea = document.getElementById("messageArea");
+        const submitBtn = document.getElementById("submitBtn");
+        const loginModeBtn = document.getElementById("loginModeBtn");
+        const signupModeBtn = document.getElementById("signupModeBtn");
+        const authForm = document.getElementById("authForm");
+        let mode = "login";
+        let auth = null;
+
+        if (!hasFirebaseConfig) {
+            messageArea.textContent = "Firebase config is missing. Set FIREBASE_* environment variables and reload.";
+            messageArea.classList.add("error");
+            submitBtn.disabled = true;
+        } else {
+            const app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    window.location.replace("/");
+                }
+            });
+        }
+
+        function setMode(nextMode) {
+            mode = nextMode;
+            submitBtn.textContent = mode === "login" ? "Login" : "Create Account";
+            loginModeBtn.classList.toggle("active", mode === "login");
+            signupModeBtn.classList.toggle("active", mode === "signup");
+            messageArea.textContent = "";
+            messageArea.classList.remove("error");
+        }
+
+        loginModeBtn.addEventListener("click", () => setMode("login"));
+        signupModeBtn.addEventListener("click", () => setMode("signup"));
+
+        authForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            if (!auth) {
+                return;
+            }
+
+            const email = document.getElementById("email").value.trim();
+            const password = document.getElementById("password").value;
+            submitBtn.disabled = true;
+            messageArea.textContent = mode === "login" ? "Signing in..." : "Creating account...";
+            messageArea.classList.remove("error");
+
+            try {
+                if (mode === "login") {
+                    await signInWithEmailAndPassword(auth, email, password);
+                } else {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                }
+                window.location.replace("/");
+            } catch (error) {
+                messageArea.textContent = error.message || "Authentication failed.";
+                messageArea.classList.add("error");
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

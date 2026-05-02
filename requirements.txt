@@ -1,0 +1,13 @@
+django
+django-cors-headers
+djangorestframework
+django-extensions
+gunicorn
+whitenoise
+numpy
+pandas
+scipy
+scikit-learn
+nltk
+pyarrow
+supabase

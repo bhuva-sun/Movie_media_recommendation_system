@@ -1,0 +1,200 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Watchlist | Movie Recommendation System</title>
+    <link rel="shortcut icon" href="{% static 'logo.ico' %}">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --border: #334155;
+            --text: #f1f5f9;
+            --muted: #cbd5e1;
+            --primary: #6366f1;
+            --danger: #ef4444;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            min-height: 100vh;
+            background: linear-gradient(135deg, var(--bg), #1a1f3a);
+            color: var(--text);
+        }
+        .wrap { max-width: 1100px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+        .topbar {
+            display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .btn {
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text);
+            text-decoration: none;
+            padding: 0.6rem 0.95rem;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+        .btn:hover { border-color: var(--primary); color: var(--primary); }
+        h1 { margin-bottom: 0.35rem; }
+        .subtitle { color: var(--muted); margin-bottom: 1.1rem; }
+        .status { color: var(--muted); margin-bottom: 1rem; min-height: 1rem; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 1rem;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .poster {
+            width: 100%;
+            height: 280px;
+            object-fit: cover;
+            background: #0b1220;
+        }
+        .card-body { padding: 0.9rem; }
+        .title { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; line-height: 1.35; }
+        .meta { font-size: 0.87rem; color: var(--muted); margin-bottom: 0.8rem; }
+        .remove-btn {
+            width: 100%;
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            color: #fca5a5;
+            background: transparent;
+            border-radius: 8px;
+            padding: 0.55rem;
+            cursor: pointer;
+        }
+        .remove-btn:hover { border-color: var(--danger); color: #fecaca; }
+        .empty {
+            border: 1px dashed var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            color: var(--muted);
+        }
+    </style>
+</head>
+<body>
+    <main class="wrap">
+        <div class="topbar">
+            <div>
+                <h1>My Watchlist</h1>
+                <p class="subtitle">Movies you saved from recommendations and trending.</p>
+            </div>
+            <div>
+                <a class="btn" href="/">Home</a>
+                <button id="logoutButton" class="btn" type="button">Logout</button>
+            </div>
+        </div>
+        <p class="status" id="statusText">Loading watchlist...</p>
+        <div id="watchlistRoot"></div>
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "{{ firebase_config.apiKey|escapejs }}",
+            authDomain: "{{ firebase_config.authDomain|escapejs }}",
+            projectId: "{{ firebase_config.projectId|escapejs }}",
+            storageBucket: "{{ firebase_config.storageBucket|escapejs }}",
+            messagingSenderId: "{{ firebase_config.messagingSenderId|escapejs }}",
+            appId: "{{ firebase_config.appId|escapejs }}",
+            measurementId: "{{ firebase_config.measurementId|escapejs }}"
+        };
+
+        const hasFirebaseConfig = Boolean(firebaseConfig.apiKey && firebaseConfig.authDomain && firebaseConfig.projectId && firebaseConfig.appId);
+        const statusText = document.getElementById("statusText");
+        const watchlistRoot = document.getElementById("watchlistRoot");
+        const logoutButton = document.getElementById("logoutButton");
+
+        if (!hasFirebaseConfig) {
+            statusText.textContent = "Firebase configuration missing.";
+            window.location.replace("/auth/");
+        } else {
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+
+            onAuthStateChanged(auth, (user) => {
+                if (!user) {
+                    window.location.replace("/auth/");
+                    return;
+                }
+                loadWatchlist(user.uid);
+            });
+
+            logoutButton.addEventListener("click", async () => {
+                await signOut(auth);
+                window.location.replace("/auth/");
+            });
+        }
+
+        async function loadWatchlist(uid) {
+            statusText.textContent = "Loading watchlist...";
+            try {
+                const response = await fetch(`/api/watchlist/?uid=${encodeURIComponent(uid)}`);
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    statusText.textContent = data.message || "Failed to load watchlist.";
+                    return;
+                }
+                renderWatchlist(uid, data.items || []);
+            } catch (error) {
+                statusText.textContent = "Error loading watchlist.";
+            }
+        }
+
+        function renderWatchlist(uid, items) {
+            if (!items.length) {
+                statusText.textContent = "No saved movies yet.";
+                watchlistRoot.innerHTML = `<div class="empty">Your watchlist is empty. Add movies from Home or Results pages.</div>`;
+                return;
+            }
+            statusText.textContent = `${items.length} saved movies`;
+            watchlistRoot.innerHTML = `<div class="grid">${items.map((item) => (
+                `<article class="card">
+                    ${item.poster_url ? `<img class="poster" src="${item.poster_url}" alt="${item.title} poster">` : ""}
+                    <div class="card-body">
+                        <h2 class="title">${item.title}</h2>
+                        <p class="meta">⭐ ${item.rating || "N/A"} • 📅 ${item.release_date || "Unknown"}</p>
+                        <button class="remove-btn" data-title="${encodeURIComponent(item.title)}">Remove</button>
+                    </div>
+                </article>`
+            )).join("")}</div>`;
+
+            watchlistRoot.querySelectorAll(".remove-btn").forEach((button) => {
+                button.addEventListener("click", async () => {
+                    const title = decodeURIComponent(button.dataset.title || "");
+                    await removeItem(uid, title);
+                });
+            });
+        }
+
+        async function removeItem(uid, title) {
+            statusText.textContent = "Removing movie...";
+            try {
+                const response = await fetch("/api/watchlist/", {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ uid, title })
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    statusText.textContent = data.message || "Failed to remove movie.";
+                    return;
+                }
+                renderWatchlist(uid, data.items || []);
+            } catch (error) {
+                statusText.textContent = "Error removing movie.";
+            }
+        }
+    </script>
+</body>
+</html>
