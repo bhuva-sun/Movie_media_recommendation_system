@@ -1,11 +1,13 @@
 services:
   - type: web
     name: movie-recommendation-system
-    env: python
+    runtime: python
     region: oregon
     plan: free
+    branch: main
+    autoDeploy: true
     buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
-    startCommand: "gunicorn movie_recommendation.wsgi:application"
+    startCommand: "gunicorn movie_recommendation.wsgi:application --bind 0.0.0.0:$PORT"
     envVars:
       - key: SECRET_KEY
         generateValue: true
