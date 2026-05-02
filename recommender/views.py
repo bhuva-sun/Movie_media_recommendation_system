@@ -503,10 +503,14 @@ def model_status(request):
 def trending_movies(request):
     """API endpoint for real-time trending movies."""
     movies = _fetch_trending_movies(limit=10)
+    has_tmdb = bool(
+        os.environ.get("TMDB_API_KEY", "").strip()
+        or os.environ.get("TMDB_READ_ACCESS_TOKEN", "").strip()
+    )
     return JsonResponse({
         "movies": movies,
         "count": len(movies),
-        "source": "tmdb" if os.environ.get("TMDB_API_KEY", "").strip() else "cache",
+        "source": "tmdb" if has_tmdb else "cache",
     })
 
 
