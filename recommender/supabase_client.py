@@ -1,6 +1,7 @@
 """Supabase helper functions for per-user watchlists."""
 
 from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 from django.conf import settings
 
@@ -11,19 +12,87 @@ except ImportError:  # pragma: no cover
     create_client = None
 
 
+def _normalize_supabase_url(raw: str) -> str:
+    """Strip PostgREST suffix if present."""
+    raw = raw.strip().rstrip("/")
+    if "/rest/v1" in raw:
+        raw = raw.split("/rest/v1", 1)[0].rstrip("/")
+    return raw
+
+
+def _validate_supabase_project_url(url: str) -> Optional[str]:
+    """
+    Ensure URL targets the project's REST API host (…supabase.co), not the
+    marketing site or dashboard (which return HTML 404s to the client).
+    """
+    if not url:
+        return "SUPABASE_URL is empty."
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return "SUPABASE_URL is not a valid URL."
+
+    if parsed.scheme not in ("https", "http"):
+        return "SUPABASE_URL must start with https://"
+
+    host = (parsed.netloc or "").lower()
+    if "@" in host:
+        host = host.split("@")[-1]
+
+    # Hitting supabase.com / app hosts returns Studio HTML instead of PostgREST JSON.
+    bad_prefixes = ("supabase.com", "supabase.io")
+    if any(host == h or host.endswith("." + h) for h in bad_prefixes):
+        return (
+            "SUPABASE_URL must be your Project URL from Supabase → Settings → API "
+            "(example: https://abcdefghijk.supabase.co). "
+            "Do not paste supabase.com, dashboard, or “Open in Studio” browser URLs."
+        )
+
+    if not host.endswith(".supabase.co"):
+        return (
+            "SUPABASE_URL must look like https://YOUR_PROJECT_REF.supabase.co "
+            "(copy “Project URL” under Settings → API)."
+        )
+
+    return None
+
+
+def _friendly_api_error(exc: BaseException, action: str) -> str:
+    """Turn noisy HTML/404 responses into a fix hint."""
+    message = str(exc)
+    if (
+        "JSON could not be generated" in message
+        or "<!DOCTYPE" in message
+        or "Supabase</title>" in message
+        or "data-dpl-id" in message
+    ):
+        return (
+            f"{action}: Supabase returned a web page instead of API data — "
+            "SUPABASE_URL in Render is almost certainly wrong. "
+            "Set it to Project URL: Supabase Dashboard → Settings → API → "
+            "Project URL (format https://xxxx.supabase.co only)."
+        )
+    if "403" in message:
+        return (
+            "Supabase access forbidden (403). "
+            "Use SUPABASE_SERVICE_ROLE_KEY from Settings → API (secret), not the anon key."
+        )
+    return f"{action}: {exc}"
+
+
 def _get_client() -> Tuple[Optional["Client"], Optional[str]]:
     """Return Supabase client and error string (if any)."""
     if create_client is None:
         return None, "Supabase dependency is not installed."
 
-    supabase_url = getattr(settings, "SUPABASE_URL", "").strip()
+    supabase_url = _normalize_supabase_url(getattr(settings, "SUPABASE_URL", "") or "")
     service_role_key = getattr(settings, "SUPABASE_SERVICE_ROLE_KEY", "").strip()
     if not supabase_url or not service_role_key:
         return None, "Supabase credentials are missing."
 
-    # Accept either project URL or PostgREST URL.
-    if "/rest/v1" in supabase_url:
-        supabase_url = supabase_url.split("/rest/v1", 1)[0].rstrip("/")
+    url_error = _validate_supabase_project_url(supabase_url)
+    if url_error:
+        return None, url_error
 
     try:
         return create_client(supabase_url, service_role_key), None
@@ -47,10 +116,7 @@ def list_watchlist(firebase_uid: str) -> Tuple[List[Dict], Optional[str]]:
         )
         return response.data or [], None
     except Exception as exc:
-        message = str(exc)
-        if "403" in message:
-            return [], "Supabase access forbidden (403). Use SUPABASE_SERVICE_ROLE_KEY, or disable RLS for watchlist_items."
-        return [], f"Failed to fetch watchlist: {exc}"
+        return [], _friendly_api_error(exc, "Failed to fetch watchlist")
 
 
 def add_watchlist_item(
@@ -79,10 +145,7 @@ def add_watchlist_item(
         ).execute()
         return None
     except Exception as exc:
-        message = str(exc)
-        if "403" in message:
-            return "Supabase access forbidden (403). Use SUPABASE_SERVICE_ROLE_KEY, or disable RLS for watchlist_items."
-        return f"Failed to save watchlist item: {exc}"
+        return _friendly_api_error(exc, "Failed to save watchlist item")
 
 
 def remove_watchlist_item(firebase_uid: str, title: str) -> Optional[str]:
@@ -101,7 +164,4 @@ def remove_watchlist_item(firebase_uid: str, title: str) -> Optional[str]:
         )
         return None
     except Exception as exc:
-        message = str(exc)
-        if "403" in message:
-            return "Supabase access forbidden (403). Use SUPABASE_SERVICE_ROLE_KEY, or disable RLS for watchlist_items."
-        return f"Failed to remove watchlist item: {exc}"
+        return _friendly_api_error(exc, "Failed to remove watchlist item")
