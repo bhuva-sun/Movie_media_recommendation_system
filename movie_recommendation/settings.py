@@ -181,13 +181,8 @@ LOGGING = {
             'formatter': 'verbose',
             'stream': sys.stdout,
         },
-        'file': {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs', 'django.log'),
-            'maxBytes': 1024 * 1024 * 5,  # 5 MB
-            'backupCount': 5,
-            'formatter': 'verbose',
-        },
+        # No file handler: dictConfig instantiates all handlers, and paths like logs/
+        # do not exist on fresh clones (e.g. Render build). Logs go to stdout only.
     },
     'root': {
         'handlers': ['console'],
